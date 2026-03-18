@@ -116,25 +116,28 @@ endpoint = "http://green-agent:{green_port}"
 
 
 def resolve_image(agent: dict, name: str) -> None:
-    """Resolve docker image for an agent, either from 'image' field or agentbeats API."""
-    has_image = "image" in agent
-    has_id = "agentbeats_id" in agent
+    """Resolve docker image for an agent.
 
-    if has_image and has_id:
-        print(f"Error: {name} has both 'image' and 'agentbeats_id' - use one or the other")
-        sys.exit(1)
-    elif has_image:
-        if os.environ.get("GITHUB_ACTIONS"):
-            print(f"Error: {name} requires 'agentbeats_id' for GitHub Actions (use 'image' for local testing only)")
-            sys.exit(1)
-        print(f"Using {name} image: {agent['image']}")
-    elif has_id:
+    Prefer an explicit `image` when present, and fall back to AgentBeats metadata
+    when only `agentbeats_id` is provided.
+    """
+    has_image = bool(agent.get("image"))
+    has_id = bool(agent.get("agentbeats_id"))
+
+    if has_image:
+        print(f"Using explicit {name} image: {agent['image']}")
+        return
+    if has_id:
         info = fetch_agent_info(agent["agentbeats_id"])
-        agent["image"] = info["docker_image"]
+        image = info.get("docker_image")
+        if not image:
+            print(f"Error: AgentBeats metadata for {name} does not include a docker_image")
+            sys.exit(1)
+        agent["image"] = image
         print(f"Resolved {name} image: {agent['image']}")
-    else:
-        print(f"Error: {name} must have either 'image' or 'agentbeats_id' field")
-        sys.exit(1)
+        return
+    print(f"Error: {name} must have either 'image' or 'agentbeats_id' field")
+    sys.exit(1)
 
 
 def parse_scenario(scenario_path: Path) -> dict[str, Any]:
